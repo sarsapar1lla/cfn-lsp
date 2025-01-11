@@ -167,19 +167,13 @@ impl Default for ServerInfo {
     }
 }
 
-#[derive(Debug, Serialize)]
+#[derive(Debug, Serialize, Default)]
 pub struct Error {
     retry: bool,
 }
 
-impl Default for Error {
-    fn default() -> Self {
-        Self { retry: false }
-    }
-}
-
 impl Error {
-    pub fn to_value(self) -> serde_json::Value {
+    pub fn to_value(&self) -> serde_json::Value {
         let mut object = serde_json::Map::new();
         object.insert("retry".into(), serde_json::Value::Bool(self.retry));
         serde_json::Value::Object(object)

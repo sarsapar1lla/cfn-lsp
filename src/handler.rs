@@ -59,14 +59,14 @@ impl Server {
         };
         match state {
             State::Uninitialised => match request.method() {
-                RequestMethod::Initialise(params) => self.initialise(request.id(), &params),
+                RequestMethod::Initialise(params) => self.initialise(request.id(), params),
                 _ => self.uninitialised_request(request.id()),
             },
             State::Shutdown => self.request_post_shutdown(request.id()),
             State::Initialised(_) => match request.method() {
                 RequestMethod::Shutdown => self.shutdown(request.id()),
                 RequestMethod::TextDocumentDiagnostic(params) => {
-                    self.text_document_diagnostic(request.id(), &params)
+                    self.text_document_diagnostic(request.id(), params)
                 }
                 _ => todo!(),
             },
@@ -79,10 +79,11 @@ impl Server {
             lock.clone()
         };
         match state {
-            State::Uninitialised | State::Shutdown => match notification.method() {
-                NotificationMethod::Exit => self.exit(),
-                _ => {}
-            },
+            State::Uninitialised | State::Shutdown => {
+                if let NotificationMethod::Exit = notification.method() {
+                    self.exit()
+                }
+            }
             State::Initialised(_) => todo!(),
         }
     }
