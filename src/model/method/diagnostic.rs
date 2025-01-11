@@ -11,6 +11,12 @@ pub struct Params {
     previous_result_id: Option<String>,
 }
 
+impl Params {
+    pub fn uri(&self) -> &str {
+        &self.text_document.uri
+    }
+}
+
 #[derive(Debug, Deserialize)]
 #[cfg_attr(test, derive(PartialEq, Eq))]
 struct TextDocumentIdentifier {

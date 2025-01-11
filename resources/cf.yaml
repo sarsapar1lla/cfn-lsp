@@ -1,0 +1,4 @@
+Parameters:
+  Something:
+    Type: String
+    Description: It's a thing

@@ -1,7 +1,7 @@
 use std::sync::{Arc, Mutex};
 
 use crate::{
-    method::diagnostic::{Lint, MockLinter},
+    method::diagnostic::{CfnLinter, Lint},
     model::{
         method::{diagnostic, initialise, NotificationMethod, RequestMethod},
         Error, ErrorType, Message, Notification, Request, RequestId, Response,
@@ -25,7 +25,7 @@ impl Default for Server {
     fn default() -> Self {
         Self {
             state: Arc::new(Mutex::new(State::Uninitialised)),
-            linter: Arc::new(MockLinter),
+            linter: Arc::new(CfnLinter),
         }
     }
 }

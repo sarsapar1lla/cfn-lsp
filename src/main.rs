@@ -1,14 +1,14 @@
 #![allow(dead_code)]
 
 use axum::{body::Bytes, extract::State, response::IntoResponse, routing::get, Json, Router};
-use handler::Server;
 use model::Message;
+use server::Server;
 use tokio::net::TcpListener;
 use tracing_subscriber::util::SubscriberInitExt;
 
-mod handler;
 mod method;
 mod model;
+mod server;
 
 #[tokio::main(flavor = "current_thread")]
 async fn main() {
