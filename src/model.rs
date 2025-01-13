@@ -1,9 +1,21 @@
 // reference: https://www.jsonrpc.org/specification
+use method::diagnostic;
+use method::initialise;
 use method::NotificationMethod;
 use method::RequestMethod;
 use serde::{Deserialize, Serialize};
 
 pub mod method;
+
+#[derive(Debug)]
+#[cfg_attr(test, derive(PartialEq, Eq))]
+pub enum Header {
+    ContentLength(u32),
+    ContentType {
+        content_type: String,
+        charset: String,
+    },
+}
 
 #[derive(Debug, Deserialize, Serialize)]
 #[cfg_attr(test, derive(PartialEq, Eq))]
@@ -65,10 +77,18 @@ impl Notification {
 
 #[derive(Debug, Serialize)]
 #[serde(untagged)]
+pub enum ResponseResult {
+    Initialise(initialise::Result),
+    TextDocumentDiagnostic(diagnostic::Result),
+    Null,
+}
+
+#[derive(Debug, Serialize)]
+#[serde(untagged)]
 pub enum Response {
     Success {
         jsonrpc: Version,
-        result: serde_json::Value,
+        result: ResponseResult,
         id: RequestId,
     },
     Error {
@@ -80,7 +100,7 @@ pub enum Response {
 }
 
 impl Response {
-    pub fn success(id: &RequestId, result: serde_json::Value) -> Self {
+    pub fn success(id: &RequestId, result: ResponseResult) -> Self {
         Response::Success {
             jsonrpc: Version::V2,
             result,
@@ -99,13 +119,13 @@ impl Response {
 
 #[derive(Debug, Serialize)]
 pub struct Error {
-    code: i32,
+    code: ErrorCode,
     message: String,
     data: Option<serde_json::Value>,
 }
 
 impl Error {
-    pub fn new(code: i32, message: &str, data: Option<serde_json::Value>) -> Self {
+    pub fn new(code: ErrorCode, message: &str, data: Option<serde_json::Value>) -> Self {
         Error {
             code,
             message: message.into(),
@@ -114,19 +134,35 @@ impl Error {
     }
 }
 
-pub enum ErrorType {
-    Internal,
+#[derive(Debug)]
+pub enum ErrorCode {
+    ParseError,
     InvalidRequest,
+    MethodNotFound,
+    InvalidParams,
+    Internal,
     ServerNotInitialised,
 }
 
-impl ErrorType {
-    pub fn code(&self) -> i32 {
+impl ErrorCode {
+    fn code(&self) -> i32 {
         match self {
-            ErrorType::Internal => -32603,
-            ErrorType::InvalidRequest => -32600,
-            ErrorType::ServerNotInitialised => -32002,
+            ErrorCode::ParseError => -32700,
+            ErrorCode::InvalidRequest => -32600,
+            ErrorCode::MethodNotFound => -32601,
+            ErrorCode::InvalidParams => -32602,
+            ErrorCode::Internal => -32603,
+            ErrorCode::ServerNotInitialised => -32002,
         }
+    }
+}
+
+impl Serialize for ErrorCode {
+    fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
+    where
+        S: serde::Serializer,
+    {
+        serializer.serialize_i32(self.code())
     }
 }
 
@@ -219,26 +255,24 @@ mod tests {
 
         #[test]
         fn serialises_success_response() {
-            let response = Response::success(
-                &RequestId::String("123".into()),
-                serde_json::Value::String("hello".into()),
-            );
+            let response =
+                Response::success(&RequestId::String("123".into()), ResponseResult::Null);
 
             let actual = serde_json::to_string(&response).unwrap();
-            assert_eq!(actual, r#"{"jsonrpc":"2.0","result":"hello","id":"123"}"#)
+            assert_eq!(actual, r#"{"jsonrpc":"2.0","result":null,"id":"123"}"#)
         }
 
         #[test]
         fn serialises_error_response_without_data() {
             let response = Response::error(
                 &RequestId::String("123".into()),
-                Error::new(1, "Error happened", None),
+                Error::new(ErrorCode::Internal, "Error happened", None),
             );
 
             let actual = serde_json::to_string(&response).unwrap();
             assert_eq!(
                 actual,
-                r#"{"jsonrpc":"2.0","error":{"code":1,"message":"Error happened","data":null},"id":"123"}"#
+                r#"{"jsonrpc":"2.0","error":{"code":-32603,"message":"Error happened","data":null},"id":"123"}"#
             )
         }
 
@@ -247,7 +281,7 @@ mod tests {
             let response = Response::error(
                 &RequestId::String("123".into()),
                 Error::new(
-                    1,
+                    ErrorCode::Internal,
                     "Error happened",
                     Some(serde_json::Value::String("some data".into())),
                 ),
@@ -256,7 +290,7 @@ mod tests {
             let actual = serde_json::to_string(&response).unwrap();
             assert_eq!(
                 actual,
-                r#"{"jsonrpc":"2.0","error":{"code":1,"message":"Error happened","data":"some data"},"id":"123"}"#
+                r#"{"jsonrpc":"2.0","error":{"code":-32603,"message":"Error happened","data":"some data"},"id":"123"}"#
             )
         }
     }

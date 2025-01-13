@@ -24,6 +24,7 @@ struct TextDocumentIdentifier {
 }
 
 #[derive(Debug, Serialize)]
+#[serde(untagged)]
 pub enum Result {
     Full {
         kind: ReportKind,
@@ -98,13 +99,32 @@ impl Range {
     }
 }
 
-// TODO: numerical representation
-#[derive(Debug, Serialize)]
+#[derive(Debug)]
 pub enum Severity {
     Error,
     Warning,
     Information,
     Hint,
+}
+
+impl Severity {
+    fn value(&self) -> u8 {
+        match self {
+            Self::Error => 1,
+            Self::Warning => 2,
+            Self::Information => 3,
+            Self::Hint => 4,
+        }
+    }
+}
+
+impl Serialize for Severity {
+    fn serialize<S>(&self, serializer: S) -> std::result::Result<S::Ok, S::Error>
+    where
+        S: serde::Serializer,
+    {
+        serializer.serialize_u8(self.value())
+    }
 }
 
 #[derive(Debug, Serialize)]
@@ -118,11 +138,28 @@ impl CodeDescription {
     }
 }
 
-// TODO: numerical representation
-#[derive(Debug, Serialize)]
+#[derive(Debug)]
 pub enum Tag {
     Unnecessary,
     Deprecated,
+}
+
+impl Tag {
+    fn value(&self) -> u8 {
+        match self {
+            Self::Unnecessary => 1,
+            Self::Deprecated => 2,
+        }
+    }
+}
+
+impl Serialize for Tag {
+    fn serialize<S>(&self, serializer: S) -> std::result::Result<S::Ok, S::Error>
+    where
+        S: serde::Serializer,
+    {
+        serializer.serialize_u8(self.value())
+    }
 }
 
 #[derive(Debug, Serialize)]

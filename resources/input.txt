@@ -1,0 +1,16 @@
+Content-Length: 10
+Content-Type: application/vscode-jsonrpc; charset=utf-8
+
+{"jsonrpc":"2.0","method":"initialize","params":{"capabilities":{"something":"here"}},"id":"123"}
+Content-Length: 12
+Content-Type: application/vscode-jsonrpc; charset=utf-8
+
+{"jsonrpc":"2.0","method":"textDocument/diagnostic","params":{"textDocument":{"uri":"/Users/Tim/projects/cfn-lsp/resources/cf.yaml"}},"id":"456"}
+Content-Length: 8
+Content-Type: application/vscode-jsonrpc; charset=utf-8
+
+{"jsonrpc":"2.0","method":"shutdown","id":"789"}
+Content-Length: 5
+Content-Type: application/vscode-jsonrpc; charset=utf-8
+
+{"jsonrpc":"2.0","method":"exit"}

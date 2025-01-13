@@ -1,27 +1,31 @@
 #![allow(dead_code)]
 
-use axum::{body::Bytes, extract::State, response::IntoResponse, routing::get, Json, Router};
-use model::Message;
-use server::Server;
-use tokio::net::TcpListener;
-use tracing_subscriber::util::SubscriberInitExt;
+use handler::MessageHandler;
+use reader::Reader;
+use writer::Writer;
 
+mod handler;
+mod log;
 mod method;
 mod model;
-mod server;
+mod reader;
+mod writer;
 
-#[tokio::main(flavor = "current_thread")]
-async fn main() {
-    tracing_subscriber::FmtSubscriber::new().init();
-    let server = Server::default();
-    let app = Router::new().route("/", get(handle)).with_state(server);
+fn main() {
+    log::init();
 
-    let listener = TcpListener::bind("0.0.0.0:8080").await.unwrap();
-    axum::serve(listener, app).await.unwrap();
-}
+    let mut reader = Reader::new(std::io::stdin());
+    let mut handler = MessageHandler::default();
+    let mut writer = Writer::new(std::io::stdout());
 
-async fn handle(State(server): State<Server>, body: Bytes) -> impl IntoResponse {
-    let message: Message = serde_json::from_slice(&body).unwrap();
-    let response = server.handle(message);
-    Json(response)
+    loop {
+        let message = reader.read().unwrap();
+        let response = handler.handle(message);
+        if let Some(response) = response {
+            let result = writer.write(response);
+            if let Err(error) = result {
+                tracing::error!("{}", error);
+            }
+        }
+    }
 }

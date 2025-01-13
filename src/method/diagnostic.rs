@@ -18,7 +18,7 @@ impl Lint for CfnLinter {
             .output()
             .unwrap();
 
-        println!("{}", String::from_utf8(result.stdout).unwrap());
+        tracing::info!("{}", String::from_utf8(result.stdout).unwrap());
 
         if result.status.success() {
             Vec::new()

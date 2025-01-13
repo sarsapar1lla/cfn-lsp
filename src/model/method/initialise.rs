@@ -119,17 +119,35 @@ impl Default for TextDocumentSync {
     }
 }
 
-// TODO: numerical representation
-#[derive(Debug, Serialize)]
+#[derive(Debug)]
 enum TextDocumentSyncKind {
     None,
-    Incremental,
     Full,
+    Incremental,
+}
+
+impl TextDocumentSyncKind {
+    fn value(&self) -> u8 {
+        match self {
+            Self::None => 0,
+            Self::Full => 1,
+            Self::Incremental => 2,
+        }
+    }
 }
 
 impl Default for TextDocumentSyncKind {
     fn default() -> Self {
         Self::Full
+    }
+}
+
+impl Serialize for TextDocumentSyncKind {
+    fn serialize<S>(&self, serializer: S) -> std::result::Result<S::Ok, S::Error>
+    where
+        S: serde::Serializer,
+    {
+        serializer.serialize_u8(self.value())
     }
 }
 
