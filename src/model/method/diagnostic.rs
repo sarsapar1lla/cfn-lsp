@@ -62,6 +62,7 @@ pub enum ReportKind {
 }
 
 #[derive(Debug, Serialize, Builder)]
+#[cfg_attr(test, derive(PartialEq, Eq))]
 #[serde(rename_all = "camelCase")]
 pub struct Diagnostic {
     range: Range,
@@ -75,7 +76,8 @@ pub struct Diagnostic {
     data: Option<serde_json::Value>,
 }
 
-#[derive(Debug, Serialize)]
+#[derive(Debug, Serialize, Clone)]
+#[cfg_attr(test, derive(PartialEq, Eq))]
 pub struct Position {
     line: u32,
     character: u32,
@@ -88,6 +90,7 @@ impl Position {
 }
 
 #[derive(Debug, Serialize)]
+#[cfg_attr(test, derive(PartialEq, Eq))]
 pub struct Range {
     start: Position,
     end: Position,
@@ -100,6 +103,7 @@ impl Range {
 }
 
 #[derive(Debug)]
+#[cfg_attr(test, derive(PartialEq, Eq))]
 pub enum Severity {
     Error,
     Warning,
@@ -128,6 +132,7 @@ impl Serialize for Severity {
 }
 
 #[derive(Debug, Serialize)]
+#[cfg_attr(test, derive(PartialEq, Eq))]
 pub struct CodeDescription {
     href: String,
 }
@@ -139,6 +144,7 @@ impl CodeDescription {
 }
 
 #[derive(Debug)]
+#[cfg_attr(test, derive(PartialEq, Eq))]
 pub enum Tag {
     Unnecessary,
     Deprecated,
@@ -163,6 +169,7 @@ impl Serialize for Tag {
 }
 
 #[derive(Debug, Serialize)]
+#[cfg_attr(test, derive(PartialEq, Eq))]
 pub struct RelatedInformation {
     location: Location,
     message: String,
@@ -178,6 +185,7 @@ impl RelatedInformation {
 }
 
 #[derive(Debug, Serialize)]
+#[cfg_attr(test, derive(PartialEq, Eq))]
 pub struct Location {
     uri: String,
     range: Range,

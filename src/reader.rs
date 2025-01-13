@@ -103,8 +103,8 @@ impl Reader {
             nom::character::complete::digit1,
             nom::character::complete::crlf,
         );
-        nom::combinator::map_res(parser, |s| u32::from_str_radix(s, 10))
-            .map(|content_length| Header::ContentLength(content_length))
+        nom::combinator::map_res(parser, str::parse)
+            .map(Header::ContentLength)
             .parse(message)
     }
 
