@@ -9,6 +9,51 @@ pub mod method;
 
 #[derive(Debug)]
 #[cfg_attr(test, derive(PartialEq, Eq))]
+pub struct ContentType {
+    content_type: String,
+    charset: String,
+}
+
+impl ContentType {
+    pub fn new(content_type: &str, charset: &str) -> Self {
+        Self {
+            content_type: content_type.into(),
+            charset: charset.into(),
+        }
+    }
+}
+
+impl Default for ContentType {
+    fn default() -> Self {
+        Self {
+            content_type: "application/vscode-jsonrpc".into(),
+            charset: "utf-8".into(),
+        }
+    }
+}
+
+#[derive(Debug)]
+#[cfg_attr(test, derive(PartialEq, Eq))]
+pub struct Headers {
+    content_length: usize,
+    content_type: ContentType,
+}
+
+impl Headers {
+    pub fn new(content_length: usize, content_type: ContentType) -> Self {
+        Self {
+            content_length,
+            content_type,
+        }
+    }
+
+    pub fn content_length(&self) -> &usize {
+        &self.content_length
+    }
+}
+
+#[derive(Debug)]
+#[cfg_attr(test, derive(PartialEq, Eq))]
 pub enum Header {
     ContentLength(u32),
     ContentType {
