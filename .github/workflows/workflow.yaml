@@ -1,0 +1,10 @@
+name: Build workflow
+
+on: [push]
+
+jobs:
+  run-tests:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Run tests with cargo
+        run: cargo test

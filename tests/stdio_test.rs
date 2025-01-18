@@ -6,7 +6,7 @@ use std::{
 mod common;
 
 #[test]
-fn test_lifecycle() {
+fn lifecycle() {
     let mut command = Command::new(env!("CARGO_BIN_EXE_cfn-lsp"))
         .arg("stdio")
         .stdin(Stdio::piped())

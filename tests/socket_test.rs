@@ -7,7 +7,7 @@ use std::{
 mod common;
 
 #[test]
-fn test_lifecycle() {
+fn lifecycle() {
     let port = "55555";
     launch_server(port.to_string());
 
