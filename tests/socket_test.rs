@@ -45,4 +45,5 @@ fn launch_server(port: String) {
             .spawn()
             .unwrap();
     });
+    std::thread::sleep(std::time::Duration::new(1, 0));
 }
