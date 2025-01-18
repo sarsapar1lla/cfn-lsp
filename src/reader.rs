@@ -73,10 +73,14 @@ where
         .read_exact(&mut buffer)
         .map_err(|_| ReadError::Internal("Failed to read from input".into()))?;
 
-    if let Ok(message) = serde_json::from_slice(&buffer) {
+    let content = String::from_utf8(buffer).map_err(|_| ReadError::InvalidRequest {
+        id: RequestId::Null,
+        error_code: ErrorCode::ParseError,
+    })?;
+    if let Ok(message) = serde_json::from_str(&content) {
         Ok(message)
     } else {
-        let request_id = request_id(&buffer)?;
+        let request_id = request_id(&content)?;
         Err(ReadError::InvalidRequest {
             id: request_id,
             error_code: ErrorCode::InvalidRequest,
@@ -84,9 +88,9 @@ where
     }
 }
 
-fn request_id(buffer: &[u8]) -> Result<RequestId, ReadError> {
+fn request_id(content: &str) -> Result<RequestId, ReadError> {
     let value: serde_json::Value =
-        serde_json::from_slice(buffer).map_err(|_| ReadError::InvalidRequest {
+        serde_json::from_str(content).map_err(|_| ReadError::InvalidRequest {
             id: RequestId::Null,
             error_code: ErrorCode::ParseError,
         })?;
