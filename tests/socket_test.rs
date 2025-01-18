@@ -8,7 +8,7 @@ mod common;
 
 #[test]
 fn lifecycle() {
-    let port = "55555";
+    let port = "32770"; // TODO: automatically assign available port
     launch_server(port.to_string());
 
     let mut connection = TcpStream::connect(format!("127.0.0.1:{port}")).unwrap();
