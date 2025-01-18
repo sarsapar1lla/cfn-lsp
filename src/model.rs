@@ -1,3 +1,5 @@
+use std::fmt::Display;
+
 // reference: https://www.jsonrpc.org/specification
 use method::diagnostic;
 use method::initialise;
@@ -32,6 +34,12 @@ impl Default for ContentType {
     }
 }
 
+impl Display for ContentType {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "{}; charset={}", self.content_type, self.charset)
+    }
+}
+
 #[derive(Debug)]
 #[cfg_attr(test, derive(PartialEq, Eq))]
 pub struct Headers {
@@ -49,6 +57,16 @@ impl Headers {
 
     pub fn content_length(&self) -> &usize {
         &self.content_length
+    }
+}
+
+impl Display for Headers {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(
+            f,
+            "Content-Length: {}\r\nContent-Type: {}\r\n\r\n",
+            self.content_length, self.content_type
+        )
     }
 }
 
@@ -76,6 +94,16 @@ pub enum RequestId {
     String(String),
     Number(u32),
     Null,
+}
+
+impl Display for RequestId {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            RequestId::String(id) => write!(f, "{id}"),
+            RequestId::Number(id) => write!(f, "{id}"),
+            RequestId::Null => write!(f, "null"),
+        }
+    }
 }
 
 #[derive(Debug, Deserialize)]
@@ -129,37 +157,45 @@ pub enum ResponseResult {
 }
 
 #[derive(Debug, Serialize)]
-#[serde(untagged)]
-pub enum Response {
-    Success {
-        jsonrpc: Version,
-        result: ResponseResult,
-        id: RequestId,
-    },
-    Error {
-        jsonrpc: Version,
-        error: Error,
-        id: RequestId,
-    },
-    Batch(Vec<Response>),
+pub struct SuccessResponse {
+    jsonrpc: Version,
+    result: ResponseResult,
+    id: RequestId,
 }
 
-impl Response {
-    pub fn success(id: &RequestId, result: ResponseResult) -> Self {
-        Response::Success {
+impl SuccessResponse {
+    pub fn new(id: &RequestId, result: ResponseResult) -> Self {
+        SuccessResponse {
             jsonrpc: Version::V2,
             result,
             id: id.clone(),
         }
     }
+}
 
-    pub fn error(id: &RequestId, error: Error) -> Self {
-        Response::Error {
+#[derive(Debug, Serialize)]
+pub struct ErrorResponse {
+    jsonrpc: Version,
+    error: Error,
+    id: RequestId,
+}
+
+impl ErrorResponse {
+    pub fn new(id: &RequestId, error: Error) -> Self {
+        ErrorResponse {
             jsonrpc: Version::V2,
             error,
             id: id.clone(),
         }
     }
+}
+
+#[derive(Debug, Serialize)]
+#[serde(untagged)]
+pub enum Response {
+    Success(SuccessResponse),
+    Error(ErrorResponse),
+    Batch(Vec<Response>),
 }
 
 #[derive(Debug, Serialize)]
@@ -187,6 +223,7 @@ pub enum ErrorCode {
     InvalidParams,
     Internal,
     ServerNotInitialised,
+    ServerAlreadyInitialised,
 }
 
 impl ErrorCode {
@@ -198,6 +235,7 @@ impl ErrorCode {
             ErrorCode::InvalidParams => -32602,
             ErrorCode::Internal => -32603,
             ErrorCode::ServerNotInitialised => -32002,
+            ErrorCode::ServerAlreadyInitialised => -32003,
         }
     }
 }
@@ -248,13 +286,13 @@ mod tests {
 
         #[test]
         fn deserialises_request() {
-            let json = r#"{"jsonrpc":"2.0","method":"test","params":true,"id":"123"}"#;
+            let json = r#"{"jsonrpc":"2.0","method":"shutdown","id":"123"}"#;
             let actual: Message = serde_json::from_str(json).unwrap();
             assert_eq!(
                 actual,
                 Message::Request(Request {
                     jsonrpc: Version::V2,
-                    method: RequestMethod::Test(true),
+                    method: RequestMethod::Shutdown,
                     id: RequestId::String("123".into())
                 })
             )
@@ -262,19 +300,19 @@ mod tests {
 
         #[test]
         fn deserialises_batch_request() {
-            let json = r#"[{"jsonrpc":"2.0","method":"test","params":true,"id":"123"},{"jsonrpc":"2.0","method":"test","params":false,"id":"456"}]"#;
+            let json = r#"[{"jsonrpc":"2.0","method":"shutdown","id":"123"},{"jsonrpc":"2.0","method":"shutdown","id":"456"}]"#;
             let actual: Message = serde_json::from_str(json).unwrap();
             assert_eq!(
                 actual,
                 Message::BatchRequest(vec![
                     Request {
                         jsonrpc: Version::V2,
-                        method: RequestMethod::Test(true),
+                        method: RequestMethod::Shutdown,
                         id: RequestId::String("123".into())
                     },
                     Request {
                         jsonrpc: Version::V2,
-                        method: RequestMethod::Test(false),
+                        method: RequestMethod::Shutdown,
                         id: RequestId::String("456".into())
                     }
                 ])
@@ -283,13 +321,13 @@ mod tests {
 
         #[test]
         fn deserialises_notification() {
-            let json = r#"{"jsonrpc":"2.0","method":"test","params":true}"#;
+            let json = r#"{"jsonrpc":"2.0","method":"exit"}"#;
             let actual: Message = serde_json::from_str(json).unwrap();
             assert_eq!(
                 actual,
                 Message::Notification(Notification {
                     jsonrpc: Version::V2,
-                    method: NotificationMethod::Test(true),
+                    method: NotificationMethod::Exit,
                 })
             )
         }
@@ -300,8 +338,9 @@ mod tests {
 
         #[test]
         fn serialises_success_response() {
-            let response =
-                Response::success(&RequestId::String("123".into()), ResponseResult::Null);
+            let success =
+                SuccessResponse::new(&RequestId::String("123".into()), ResponseResult::Null);
+            let response = Response::Success(success);
 
             let actual = serde_json::to_string(&response).unwrap();
             assert_eq!(actual, r#"{"jsonrpc":"2.0","result":null,"id":"123"}"#)
@@ -309,10 +348,11 @@ mod tests {
 
         #[test]
         fn serialises_error_response_without_data() {
-            let response = Response::error(
+            let error = ErrorResponse::new(
                 &RequestId::String("123".into()),
                 Error::new(ErrorCode::Internal, "Error happened", None),
             );
+            let response = Response::Error(error);
 
             let actual = serde_json::to_string(&response).unwrap();
             assert_eq!(
@@ -323,7 +363,7 @@ mod tests {
 
         #[test]
         fn serialises_error_response_with_data() {
-            let response = Response::error(
+            let error = ErrorResponse::new(
                 &RequestId::String("123".into()),
                 Error::new(
                     ErrorCode::Internal,
@@ -331,6 +371,7 @@ mod tests {
                     Some(serde_json::Value::String("some data".into())),
                 ),
             );
+            let response = Response::Error(error);
 
             let actual = serde_json::to_string(&response).unwrap();
             assert_eq!(

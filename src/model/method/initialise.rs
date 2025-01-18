@@ -1,3 +1,5 @@
+use std::fmt::Display;
+
 use serde::{Deserialize, Serialize};
 
 #[derive(Debug, Deserialize, Clone)]
@@ -17,11 +19,40 @@ pub struct Params {
     workspace_folders: Option<Vec<WorkspaceFolder>>,
 }
 
+impl Params {
+    pub fn process_id(&self) -> Option<i32> {
+        self.process_id
+    }
+
+    pub fn client_info(&self) -> Option<&ClientInfo> {
+        self.client_info.as_ref()
+    }
+}
+
 #[derive(Debug, Deserialize, Clone)]
 #[cfg_attr(test, derive(PartialEq, Eq))]
-struct ClientInfo {
+pub struct ClientInfo {
     name: String,
     version: Option<String>,
+}
+
+impl Display for ClientInfo {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        if let Some(version) = &self.version {
+            write!(f, "{}:{}", self.name, version)
+        } else {
+            write!(f, "{}", self.name)
+        }
+    }
+}
+
+impl Default for ClientInfo {
+    fn default() -> Self {
+        Self {
+            name: "unknown".into(),
+            version: None,
+        }
+    }
 }
 
 #[derive(Debug, Deserialize, Clone)]

@@ -13,10 +13,6 @@ pub enum RequestMethod {
     Shutdown,
     #[serde(rename = "textDocument/diagnostic")]
     TextDocumentDiagnostic(diagnostic::Params),
-
-    #[cfg(test)]
-    #[serde(rename = "test")]
-    Test(bool),
 }
 
 #[derive(Debug, Deserialize)]
@@ -27,10 +23,6 @@ pub enum NotificationMethod {
     Exit,
     #[serde(rename = "initialized")]
     Initialised,
-
-    #[cfg(test)]
-    #[serde(rename = "test")]
-    Test(bool),
 }
 
 #[cfg(test)]
@@ -46,17 +38,10 @@ mod tests {
             assert!(result.is_err())
         }
 
-        // #[test]
-        // fn deserialises_initialise() {
-        //     let actual: Method = serde_json::from_str(r#""initialise""#).unwrap();
-        //     assert_eq!(actual, Method::Initialise)
-        // }
-
         #[test]
-        fn deserialises_test() {
-            let actual: RequestMethod =
-                serde_json::from_str(r#"{"method":"test","params":true}"#).unwrap();
-            assert_eq!(actual, RequestMethod::Test(true))
+        fn deserialises_shutdown() {
+            let actual: RequestMethod = serde_json::from_str(r#"{"method":"shutdown"}"#).unwrap();
+            assert_eq!(actual, RequestMethod::Shutdown)
         }
     }
 }

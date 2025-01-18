@@ -1,72 +1,28 @@
-use std::{
-    fmt::Display,
-    io::{Stdout, Write},
-};
+use std::{fmt::Display, io::Write};
 
-use crate::model::Response;
+use crate::model::{ContentType, Headers, Response};
 
-const CONTENT_TYPE_HEADER: &[u8] = b"Content-Type: application/vscode-jsonrpc; charset=utf-8\r\n";
-
-pub struct WriteError {
-    message: String,
-}
-
-impl WriteError {
-    pub fn new(message: impl Into<String>) -> Self {
-        Self {
-            message: message.into(),
-        }
-    }
-}
+pub struct WriteError(String);
 
 impl Display for WriteError {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        write!(f, "{}", self.message)
+        write!(f, "{}", self.0)
     }
 }
 
-pub struct Writer {
-    stdout: Stdout,
-}
+pub fn write<W>(writer: &mut W, response: &Response) -> Result<(), WriteError>
+where
+    W: Write,
+{
+    let json = serde_json::to_string(&response)
+        .map_err(|e| WriteError(format!("Failed to serialize response: '{e}'")))?;
+    let headers = Headers::new(json.len(), ContentType::default());
+    let message = format!("{headers}{json}");
+    writer
+        .write_all(&message.into_bytes())
+        .map_err(|e| WriteError(format!("Failed to write response to stdout: '{e}'")))?;
 
-impl Writer {
-    pub fn new(stdout: Stdout) -> Self {
-        Self { stdout }
-    }
-
-    pub fn write(&mut self, response: Response) -> Result<(), WriteError> {
-        let json = serde_json::to_string(&response)
-            .map_err(|e| WriteError::new(format!("Failed to serialize response: '{e}'")))?;
-        self.write_headers(json.len())?;
-        self.stdout
-            .write(&json.into_bytes())
-            .map_err(|e| WriteError::new(format!("Failed to write response to stdout: '{e}'")))?;
-        Ok(())
-    }
-
-    fn write_headers(&mut self, content_length: usize) -> Result<(), WriteError> {
-        self.stdout
-            .write(&self.content_length(content_length))
-            .map_err(|e| {
-                WriteError::new(format!(
-                    "Failed to write Content-Length header to stdout: '{e}'"
-                ))
-            })?;
-        self.stdout.write(CONTENT_TYPE_HEADER).map_err(|e| {
-            WriteError::new(format!(
-                "Failed to write Content-Type header to stdout: '{e}'"
-            ))
-        })?;
-        self.stdout.write(b"\r\n").map_err(|e| {
-            WriteError::new(format!(
-                "Failed to write end of headers block to stdout: '{e}'"
-            ))
-        })?;
-
-        Ok(())
-    }
-
-    fn content_length(&self, content_length: usize) -> Vec<u8> {
-        format!("Content-Length: {}\r\n", content_length).into_bytes()
-    }
+    writer
+        .flush()
+        .map_err(|e| WriteError(format!("Failed to flush written bytes: '{e}'")))
 }

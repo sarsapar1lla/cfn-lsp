@@ -1,7 +1,7 @@
-Content-Length: 97
+Content-Length: 146
 Content-Type: application/vscode-jsonrpc; charset=utf-8
 
-{"jsonrpc":"2.0","method":"initialize","params":{"capabilities":{"something":"here"}},"id":"123"}Content-Length: 145
+{"jsonrpc":"2.0","method":"initialize","params":{"clientInfo": {"name":"test","version":"0.1.0"}, "capabilities":{"something":"here"}},"id":"123"}Content-Length: 145
 Content-Type: application/vscode-jsonrpc; charset=utf-8
 
 {"jsonrpc":"2.0","method":"textDocument/diagnostic","params":{"textDocument":{"uri":"/Users/Tim/projects/cfn-lsp/resources/cf.yaml"}},"id":"456"}Content-Length: 48

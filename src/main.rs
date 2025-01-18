@@ -1,9 +1,11 @@
 #![allow(dead_code)]
 
+use clap::Parser;
 use handler::MessageHandler;
-use reader::Reader;
-use writer::Writer;
+use model::Response;
 
+mod channel;
+mod cli;
 mod handler;
 mod log;
 mod method;
@@ -12,19 +14,25 @@ mod reader;
 mod writer;
 
 fn main() {
-    log::init();
+    let cli = cli::Cli::parse();
+    log::init(cli.debug());
 
-    let mut reader = Reader::new(std::io::stdin());
-    let mut handler = MessageHandler::default();
-    let mut writer = Writer::new(std::io::stdout());
+    if let Some(process_id) = cli.client_process_id() {
+        tracing::info!("Server spawned by client process {process_id}");
+    }
+    let (mut input, mut output) = channel::connect(cli.command());
+    let mut handler = MessageHandler::new(cli.client_process_id());
 
     loop {
-        let message = reader.read().unwrap();
-        let response = handler.handle(message);
+        let message = reader::read(&mut input);
+        let response = match message {
+            Ok(message) => handler.handle(message),
+            Err(error) => Some(Response::from(error)),
+        };
+
         if let Some(response) = response {
-            let result = writer.write(response);
-            if let Err(error) = result {
-                tracing::error!("{}", error);
+            if let Err(error) = writer::write(&mut output, &response) {
+                tracing::error!("{error}");
             }
         }
     }

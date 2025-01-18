@@ -1,40 +1,52 @@
 use crate::model::method::diagnostic::{Diagnostic, Params};
 use core::str;
 use std::{
-    fmt::Debug,
+    fmt::{Debug, Display},
     process::{Command, Output},
 };
 
 const CFN_LINT: &str = "cfn-lint";
 
+pub struct LintError {
+    message: String,
+}
+
+impl Display for LintError {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "{}", self.message)
+    }
+}
+
 pub trait Lint: Debug {
-    fn lint(&self, params: &Params) -> Vec<Diagnostic>;
+    fn lint(&self, params: &Params) -> Result<Vec<Diagnostic>, LintError>;
 }
 
 #[derive(Debug, Clone)]
 pub struct CfnLinter;
 
-impl CfnLinter {
-    fn run_linter(&self, uri: &str) -> Output {
-        Command::new(CFN_LINT)
-            .arg("--template")
-            .arg(uri)
-            .output()
-            .unwrap()
+impl Lint for CfnLinter {
+    fn lint(&self, params: &Params) -> Result<Vec<Diagnostic>, LintError> {
+        let result = execute_linter(params.uri())?;
+
+        if result.status.success() {
+            Ok(Vec::new())
+        } else {
+            let response = str::from_utf8(&result.stdout).map_err(|e| LintError {
+                message: format!("Linter response is not valid utf-8: {e}"),
+            })?;
+            parser::parse(response)
+        }
     }
 }
 
-impl Lint for CfnLinter {
-    fn lint(&self, params: &Params) -> Vec<Diagnostic> {
-        let result = self.run_linter(params.uri());
-
-        if result.status.success() {
-            Vec::new()
-        } else {
-            let response = str::from_utf8(&result.stdout).unwrap();
-            parser::parse(response).unwrap()
-        }
-    }
+fn execute_linter(uri: &str) -> Result<Output, LintError> {
+    Command::new(CFN_LINT)
+        .arg("--template")
+        .arg(uri)
+        .output()
+        .map_err(|e| LintError {
+            message: format!("Failed to invoke '{CFN_LINT}': {e}"),
+        })
 }
 
 mod parser {
@@ -50,6 +62,8 @@ mod parser {
 
     use crate::model::method::diagnostic::{Diagnostic, Position, Range, Severity};
 
+    use super::LintError;
+
     #[derive(Debug)]
     #[cfg_attr(test, derive(PartialEq, Eq))]
     struct Code {
@@ -57,11 +71,13 @@ mod parser {
         severity: Severity,
     }
 
-    pub fn parse(response: &str) -> Result<Vec<Diagnostic>, String> {
+    pub fn parse(response: &str) -> Result<Vec<Diagnostic>, LintError> {
         let parser = terminated(separated_list1(line_ending, diagnostic), line_ending);
         let (_, diagnostics) = all_consuming(parser)
             .parse(response)
-            .map_err(|_| String::from("placeholder"))?;
+            .map_err(|e| LintError {
+                message: format!("Failed to parse response from linter: {e}"),
+            })?;
         Ok(diagnostics)
     }
 
@@ -108,15 +124,15 @@ mod parser {
     fn code(response: &str) -> nom::IResult<&str, Code> {
         terminated(take_until(" "), tag(" "))
             .map(|code: &str| match code {
-                code if code.starts_with("E") => Code {
+                code if code.starts_with('E') => Code {
                     value: code.into(),
                     severity: Severity::Error,
                 },
-                code if code.starts_with("W") => Code {
+                code if code.starts_with('W') => Code {
                     value: code.into(),
                     severity: Severity::Warning,
                 },
-                code if code.starts_with("I") => Code {
+                code if code.starts_with('I') => Code {
                     value: code.into(),
                     severity: Severity::Information,
                 },
