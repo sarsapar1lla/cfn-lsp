@@ -1,28 +1,50 @@
-use serde::Deserialize;
+use serde::{Deserialize, Serialize};
 
 pub mod diagnostic;
+pub mod did_change;
+pub mod did_open;
+pub mod did_save;
 pub mod initialise;
+pub mod initialised;
 
-#[derive(Debug, Deserialize)]
+#[derive(Debug, Deserialize, Serialize)]
 #[cfg_attr(test, derive(PartialEq, Eq))]
 #[serde(tag = "method", content = "params")]
 pub enum RequestMethod {
     #[serde(rename = "initialize")]
     Initialise(initialise::Params),
+
     #[serde(rename = "shutdown")]
     Shutdown,
+
     #[serde(rename = "textDocument/diagnostic")]
-    TextDocumentDiagnostic(diagnostic::Params),
+    PullDiagnostics(diagnostic::pull::Params),
 }
 
-#[derive(Debug, Deserialize)]
+#[derive(Debug, Deserialize, Serialize)]
 #[cfg_attr(test, derive(PartialEq, Eq))]
 #[serde(tag = "method", content = "params")]
 pub enum NotificationMethod {
     #[serde(rename = "exit")]
     Exit,
+
     #[serde(rename = "initialized")]
-    Initialised,
+    Initialised(initialised::Params),
+
+    #[serde(rename = "textDocument/didChange")]
+    DidChange(did_change::Params),
+
+    #[serde(rename = "textDocument/didClose")]
+    DidClose(serde_json::Value),
+
+    #[serde(rename = "textDocument/didOpen")]
+    DidOpen(did_open::Params),
+
+    #[serde(rename = "textDocument/didSave")]
+    DidSave(did_save::Params),
+
+    #[serde(rename = "textDocument/publishDiagnostics")]
+    PublishDiagnostics(diagnostic::publish::Params),
 }
 
 #[cfg(test)]

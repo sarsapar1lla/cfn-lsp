@@ -1,0 +1,13 @@
+[[language]]
+name = "cloudformation"
+scope = "source.yaml.cloudformation"
+roots = ["cf.yaml", "cf.yml"]
+file-types = [{ glob = "cf.yaml" }]
+comment-token = "#"
+grammar = "yaml"
+indent = { tab-width = 2, unit = "  " }
+language-servers = [ "cfn-lsp" ]
+
+[language-server.cfn-lsp]
+command = "cfn-lsp"
+args = ["stdio", "--debug"]

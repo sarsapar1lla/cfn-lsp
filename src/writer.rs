@@ -1,6 +1,6 @@
 use std::{fmt::Display, io::Write};
 
-use crate::model::{ContentType, Headers, Response};
+use crate::model::{ContentType, Headers, Message};
 
 pub struct WriteError(String);
 
@@ -10,7 +10,7 @@ impl Display for WriteError {
     }
 }
 
-pub fn write<W>(writer: &mut W, response: &Response) -> Result<(), WriteError>
+pub fn write<W>(writer: &mut W, response: &Message) -> Result<(), WriteError>
 where
     W: Write,
 {
@@ -18,6 +18,8 @@ where
         .map_err(|e| WriteError(format!("Failed to serialize response: '{e}'")))?;
     let headers = Headers::new(json.len(), ContentType::default());
     let message = format!("{headers}{json}");
+
+    tracing::debug!("cfn-lsp -> {json}");
     writer
         .write_all(&message.into_bytes())
         .map_err(|e| WriteError(format!("Failed to write response to stdout: '{e}'")))?;

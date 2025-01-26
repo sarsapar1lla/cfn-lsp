@@ -70,16 +70,6 @@ impl Display for Headers {
     }
 }
 
-#[derive(Debug)]
-#[cfg_attr(test, derive(PartialEq, Eq))]
-pub enum Header {
-    ContentLength(u32),
-    ContentType {
-        content_type: String,
-        charset: String,
-    },
-}
-
 #[derive(Debug, Deserialize, Serialize)]
 #[cfg_attr(test, derive(PartialEq, Eq))]
 pub enum Version {
@@ -106,16 +96,17 @@ impl Display for RequestId {
     }
 }
 
-#[derive(Debug, Deserialize)]
+#[derive(Debug, Deserialize, Serialize)]
 #[cfg_attr(test, derive(PartialEq, Eq))]
 #[serde(untagged)]
 pub enum Message {
     Request(Request),
     BatchRequest(Vec<Request>),
     Notification(Notification),
+    Response(Response),
 }
 
-#[derive(Debug, Deserialize)]
+#[derive(Debug, Deserialize, Serialize)]
 #[cfg_attr(test, derive(PartialEq, Eq))]
 pub struct Request {
     jsonrpc: Version,
@@ -125,6 +116,14 @@ pub struct Request {
 }
 
 impl Request {
+    pub fn new(id: RequestId, method: RequestMethod) -> Self {
+        Self {
+            jsonrpc: Version::V2,
+            method,
+            id,
+        }
+    }
+
     pub fn method(&self) -> &RequestMethod {
         &self.method
     }
@@ -134,7 +133,7 @@ impl Request {
     }
 }
 
-#[derive(Debug, Deserialize)]
+#[derive(Debug, Deserialize, Serialize)]
 #[cfg_attr(test, derive(PartialEq, Eq))]
 pub struct Notification {
     jsonrpc: Version,
@@ -143,20 +142,29 @@ pub struct Notification {
 }
 
 impl Notification {
+    pub fn new(method: NotificationMethod) -> Self {
+        Self {
+            jsonrpc: Version::V2,
+            method,
+        }
+    }
+
     pub fn method(&self) -> &NotificationMethod {
         &self.method
     }
 }
 
-#[derive(Debug, Serialize)]
+#[derive(Debug, Deserialize, Serialize)]
+#[cfg_attr(test, derive(PartialEq, Eq))]
 #[serde(untagged)]
 pub enum ResponseResult {
     Initialise(initialise::Result),
-    TextDocumentDiagnostic(diagnostic::Result),
+    PullDiagnostics(diagnostic::pull::Result),
     Null,
 }
 
-#[derive(Debug, Serialize)]
+#[derive(Debug, Deserialize, Serialize)]
+#[cfg_attr(test, derive(PartialEq, Eq))]
 pub struct SuccessResponse {
     jsonrpc: Version,
     result: ResponseResult,
@@ -173,7 +181,8 @@ impl SuccessResponse {
     }
 }
 
-#[derive(Debug, Serialize)]
+#[derive(Debug, Deserialize, Serialize)]
+#[cfg_attr(test, derive(PartialEq, Eq))]
 pub struct ErrorResponse {
     jsonrpc: Version,
     error: Error,
@@ -190,7 +199,8 @@ impl ErrorResponse {
     }
 }
 
-#[derive(Debug, Serialize)]
+#[derive(Debug, Deserialize, Serialize)]
+#[cfg_attr(test, derive(PartialEq, Eq))]
 #[serde(untagged)]
 pub enum Response {
     Success(SuccessResponse),
@@ -198,7 +208,8 @@ pub enum Response {
     Batch(Vec<Response>),
 }
 
-#[derive(Debug, Serialize)]
+#[derive(Debug, Deserialize, Serialize)]
+#[cfg_attr(test, derive(PartialEq, Eq))]
 pub struct Error {
     code: ErrorCode,
     message: String,
@@ -215,7 +226,8 @@ impl Error {
     }
 }
 
-#[derive(Debug)]
+#[derive(Debug, Deserialize)]
+#[cfg_attr(test, derive(PartialEq, Eq))]
 pub enum ErrorCode {
     ParseError,
     InvalidRequest,
@@ -236,6 +248,20 @@ impl ErrorCode {
             ErrorCode::Internal => -32603,
             ErrorCode::ServerNotInitialised => -32002,
             ErrorCode::ServerAlreadyInitialised => -32003,
+        }
+    }
+}
+
+impl Display for ErrorCode {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            ErrorCode::ParseError => write!(f, "Failed to parse request"),
+            ErrorCode::InvalidRequest => write!(f, "Not a valid request"),
+            ErrorCode::MethodNotFound => write!(f, "Method not found"),
+            ErrorCode::InvalidParams => write!(f, "Invalid method parameters"),
+            ErrorCode::Internal => write!(f, "Internal failure"),
+            ErrorCode::ServerNotInitialised => write!(f, "Server not initialised"),
+            ErrorCode::ServerAlreadyInitialised => write!(f, "Server already initialised"),
         }
     }
 }
@@ -330,6 +356,13 @@ mod tests {
                     method: NotificationMethod::Exit,
                 })
             )
+        }
+
+        #[test]
+        fn deserialises_init_request() {
+            let json = r#"{"jsonrpc":"2.0","method":"initialize","params":{"capabilities":{"general":{"positionEncodings":["utf-8","utf-32","utf-16"]},"textDocument":{"codeAction":{"codeActionLiteralSupport":{"codeActionKind":{"valueSet":["","quickfix","refactor","refactor.extract","refactor.inline","refactor.rewrite","source","source.organizeImports"]}},"dataSupport":true,"disabledSupport":true,"isPreferredSupport":true,"resolveSupport":{"properties":["edit","command"]}},"completion":{"completionItem":{"deprecatedSupport":true,"insertReplaceSupport":true,"resolveSupport":{"properties":["documentation","detail","additionalTextEdits"]},"snippetSupport":true,"tagSupport":{"valueSet":[1]}},"completionItemKind":{}},"formatting":{"dynamicRegistration":false},"hover":{"contentFormat":["markdown"]},"inlayHint":{"dynamicRegistration":false},"publishDiagnostics":{"tagSupport":{"valueSet":[1,2]},"versionSupport":true},"rename":{"dynamicRegistration":false,"honorsChangeAnnotations":false,"prepareSupport":true},"signatureHelp":{"signatureInformation":{"activeParameterSupport":true,"documentationFormat":["markdown"],"parameterInformation":{"labelOffsetSupport":true}}}},"window":{"workDoneProgress":true},"workspace":{"applyEdit":true,"configuration":true,"didChangeConfiguration":{"dynamicRegistration":false},"didChangeWatchedFiles":{"dynamicRegistration":true,"relativePatternSupport":false},"executeCommand":{"dynamicRegistration":false},"fileOperations":{"didRename":true,"willRename":true},"inlayHint":{"refreshSupport":false},"symbol":{"dynamicRegistration":false},"workspaceEdit":{"documentChanges":true,"failureHandling":"abort","normalizesLineEndings":false,"resourceOperations":["create","rename","delete"]},"workspaceFolders":true}},"clientInfo":{"name":"helix","version":"25.1 (dabfb6ce)"},"processId":12276,"rootPath":"C:\\Users\\Tim\\projects\\cfn-lsp","rootUri":"file:///C:/Users/Tim/projects/cfn-lsp","workspaceFolders":[{"name":"cfn-lsp","uri":"file:///C:/Users/Tim/projects/cfn-lsp"}]},"id":0}"#;
+            let result = serde_json::from_str::<Message>(json);
+            assert!(result.is_ok())
         }
     }
 

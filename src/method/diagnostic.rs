@@ -1,4 +1,4 @@
-use crate::model::method::diagnostic::{Diagnostic, Params};
+use crate::model::method::diagnostic::Diagnostic;
 use core::str;
 use std::{
     fmt::{Debug, Display},
@@ -18,15 +18,17 @@ impl Display for LintError {
 }
 
 pub trait Lint: Debug {
-    fn lint(&self, params: &Params) -> Result<Vec<Diagnostic>, LintError>;
+    fn lint(&self, uri: &str) -> Result<Vec<Diagnostic>, LintError>;
 }
 
 #[derive(Debug, Clone)]
 pub struct CfnLinter;
 
 impl Lint for CfnLinter {
-    fn lint(&self, params: &Params) -> Result<Vec<Diagnostic>, LintError> {
-        let result = execute_linter(params.uri())?;
+    fn lint(&self, uri: &str) -> Result<Vec<Diagnostic>, LintError> {
+        let path = extract_file_path(uri);
+        tracing::debug!("Invoking cfn-lint for file '{path}'");
+        let result = execute_linter(&path)?;
 
         if result.status.success() {
             Ok(Vec::new())
@@ -34,265 +36,109 @@ impl Lint for CfnLinter {
             let response = str::from_utf8(&result.stdout).map_err(|e| LintError {
                 message: format!("Linter response is not valid utf-8: {e}"),
             })?;
-            parser::parse(response)
+            let diagnostics: Vec<model::LintDiagnostic> =
+                serde_json::from_str(response).map_err(|e| LintError {
+                    message: format!("Linter reponse didn't match expected structure: {e}"),
+                })?;
+            Ok(diagnostics.into_iter().map(From::from).collect())
         }
     }
 }
 
 fn execute_linter(uri: &str) -> Result<Output, LintError> {
     Command::new(CFN_LINT)
-        .arg("--template")
-        .arg(uri)
+        .args(["--template", uri, "--format", "json"])
         .output()
         .map_err(|e| LintError {
             message: format!("Failed to invoke '{CFN_LINT}': {e}"),
         })
 }
 
-mod parser {
+fn extract_file_path(uri: &str) -> String {
+    let path = uri.replace("file://", "");
+    let path = path.split(":").last().unwrap();
+    path.to_string()
+}
 
-    use nom::{
-        bytes::complete::{tag, take_until},
-        character::complete::{digit1, line_ending, not_line_ending},
-        combinator::{self, all_consuming},
-        multi::separated_list1,
-        sequence::{delimited, separated_pair, terminated},
-        Parser,
-    };
+mod model {
+    use crate::model::method::diagnostic;
+    use serde::Deserialize;
 
-    use crate::model::method::diagnostic::{Diagnostic, Position, Range, Severity};
-
-    use super::LintError;
-
-    #[derive(Debug)]
-    #[cfg_attr(test, derive(PartialEq, Eq))]
-    struct Code {
-        value: String,
-        severity: Severity,
+    #[derive(Debug, Deserialize)]
+    #[serde(rename_all = "PascalCase")]
+    pub struct LintDiagnostic {
+        id: String,
+        level: DiagnosticLevel,
+        location: Location,
+        message: String,
+        rule: Rule,
     }
 
-    pub fn parse(response: &str) -> Result<Vec<Diagnostic>, LintError> {
-        let parser = terminated(separated_list1(line_ending, diagnostic), line_ending);
-        let (_, diagnostics) = all_consuming(parser)
-            .parse(response)
-            .map_err(|e| LintError {
-                message: format!("Failed to parse response from linter: {e}"),
-            })?;
-        Ok(diagnostics)
+    #[derive(Debug, Deserialize)]
+    enum DiagnosticLevel {
+        Error,
+        Warning,
+        Information,
     }
 
-    fn diagnostic(response: &str) -> nom::IResult<&str, Diagnostic> {
-        let (remainder, code) = code(response)?;
-        let (remainder, message) = message(remainder)?;
-        let (remainder, range) = range(remainder)?;
-
-        let diagnostic = Diagnostic::builder()
-            .range(range)
-            .severity(code.severity)
-            .code(code.value)
-            .message(message)
-            .tags(Vec::new())
-            .related_information(Vec::new())
-            .build();
-        Ok((remainder, diagnostic))
-    }
-
-    fn range(response: &str) -> nom::IResult<&str, Range> {
-        let position_parser = separated_pair(
-            combinator::map_res(digit1, str::parse),
-            tag(":"),
-            combinator::map_res(digit1, str::parse),
-        )
-        .map(|(line, character)| {
-            let position = Position::new(line, character);
-            Range::new(position.clone(), position)
-        });
-        delimited(
-            terminated(take_until(":"), tag(":")),
-            position_parser,
-            line_ending,
-        )
-        .parse(response)
-    }
-
-    fn message(response: &str) -> nom::IResult<&str, String> {
-        terminated(not_line_ending, line_ending)
-            .map(Into::into)
-            .parse(response)
-    }
-
-    fn code(response: &str) -> nom::IResult<&str, Code> {
-        terminated(take_until(" "), tag(" "))
-            .map(|code: &str| match code {
-                code if code.starts_with('E') => Code {
-                    value: code.into(),
-                    severity: Severity::Error,
-                },
-                code if code.starts_with('W') => Code {
-                    value: code.into(),
-                    severity: Severity::Warning,
-                },
-                code if code.starts_with('I') => Code {
-                    value: code.into(),
-                    severity: Severity::Information,
-                },
-                // TODO: review
-                _ => todo!(),
-            })
-            .parse(response)
-    }
-
-    #[cfg(test)]
-    mod parser_tests {
-        use super::*;
-
-        mod diagnostic_tests {
-            use super::*;
-
-            #[test]
-            fn errors_if_not_diagnostic() {
-                let result = diagnostic("something");
-                assert!(result.is_err())
-            }
-
-            #[test]
-            fn parses_diagnostic() {
-                let actual = diagnostic("E1001 'Resource' is a required property\n/path/to/some/file.yaml:1:1\nsomething").unwrap();
-                let expected = Diagnostic::builder()
-                    .range(Range::new(Position::new(1, 1), Position::new(1, 1)))
-                    .severity(Severity::Error)
-                    .code("E1001".into())
-                    .message("'Resource' is a required property".into())
-                    .tags(Vec::new())
-                    .related_information(Vec::new())
-                    .build();
-                assert_eq!(actual, ("something", expected))
-            }
-
-            #[test]
-            fn parses_diagnostic_with_carriage_return() {
-                let actual = diagnostic("E1001 'Resource' is a required property\r\n/path/to/some/file.yaml:1:1\r\nsomething").unwrap();
-                let expected = Diagnostic::builder()
-                    .range(Range::new(Position::new(1, 1), Position::new(1, 1)))
-                    .severity(Severity::Error)
-                    .code("E1001".into())
-                    .message("'Resource' is a required property".into())
-                    .tags(Vec::new())
-                    .related_information(Vec::new())
-                    .build();
-                assert_eq!(actual, ("something", expected))
+    impl From<DiagnosticLevel> for diagnostic::Severity {
+        fn from(value: DiagnosticLevel) -> Self {
+            match value {
+                DiagnosticLevel::Error => Self::Error,
+                DiagnosticLevel::Warning => Self::Warning,
+                DiagnosticLevel::Information => Self::Information,
             }
         }
+    }
 
-        mod range_tests {
-            use super::*;
+    #[derive(Debug, Deserialize)]
+    #[serde(rename_all = "PascalCase")]
+    struct Location {
+        start: Position,
+        end: Position,
+    }
 
-            #[test]
-            fn errors_if_not_range() {
-                let result = range("something");
-                assert!(result.is_err())
-            }
-
-            #[test]
-            fn parses_range() {
-                let actual = range("/path/to/some/file.yaml:103:12\nsomething").unwrap();
-                assert_eq!(
-                    actual,
-                    (
-                        "something",
-                        Range::new(Position::new(103, 12), Position::new(103, 12))
-                    )
-                )
-            }
-
-            #[test]
-            fn parses_range_with_carriage_return() {
-                let actual = range("/path/to/some/file.yaml:103:12\r\nsomething").unwrap();
-                assert_eq!(
-                    actual,
-                    (
-                        "something",
-                        Range::new(Position::new(103, 12), Position::new(103, 12))
-                    )
-                )
-            }
+    impl From<Location> for diagnostic::Range {
+        fn from(value: Location) -> Self {
+            Self::new(
+                diagnostic::Position::from(value.start),
+                diagnostic::Position::from(value.end),
+            )
         }
+    }
 
-        mod message_tests {
-            use super::*;
+    #[derive(Debug, Deserialize)]
+    #[serde(rename_all = "PascalCase")]
+    struct Position {
+        line_number: usize,
+        column_number: usize,
+    }
 
-            #[test]
-            fn errors_if_not_message() {
-                let result = message("something");
-                assert!(result.is_err())
-            }
-
-            #[test]
-            fn parses_message() {
-                let actual = message("'Resources' is required\nsomething").unwrap();
-                assert_eq!(actual, ("something", "'Resources' is required".into()))
-            }
-
-            #[test]
-            fn parses_message_with_carriage_return() {
-                let actual = message("'Resources' is required\r\nsomething").unwrap();
-                assert_eq!(actual, ("something", "'Resources' is required".into()))
-            }
+    impl From<Position> for diagnostic::Position {
+        fn from(value: Position) -> Self {
+            diagnostic::Position::new(value.line_number - 1, value.column_number - 1)
         }
+    }
 
-        mod code_tests {
-            use super::*;
+    #[derive(Debug, Deserialize)]
+    #[serde(rename_all = "PascalCase")]
+    struct Rule {
+        id: String,
+        source: String,
+    }
 
-            // #[test]
-            // fn errors_if_not_valid_code() {
-            //     let result = code("something ");
-            //     assert!(result.is_err())
-            // }
-
-            #[test]
-            fn parses_error_code() {
-                let actual = code("E1234 something").unwrap();
-                assert_eq!(
-                    actual,
-                    (
-                        "something",
-                        Code {
-                            value: "E1234".into(),
-                            severity: Severity::Error
-                        }
-                    )
-                )
-            }
-
-            #[test]
-            fn parses_warning_code() {
-                let actual = code("W1234 something").unwrap();
-                assert_eq!(
-                    actual,
-                    (
-                        "something",
-                        Code {
-                            value: "W1234".into(),
-                            severity: Severity::Warning
-                        }
-                    )
-                )
-            }
-
-            #[test]
-            fn parses_information_code() {
-                let actual = code("I1234 something").unwrap();
-                assert_eq!(
-                    actual,
-                    (
-                        "something",
-                        Code {
-                            value: "I1234".into(),
-                            severity: Severity::Information
-                        }
-                    )
-                )
-            }
+    impl From<LintDiagnostic> for diagnostic::Diagnostic {
+        fn from(value: LintDiagnostic) -> Self {
+            Self::builder()
+                .range(diagnostic::Range::from(value.location))
+                .severity(diagnostic::Severity::from(value.level))
+                .code(value.rule.id)
+                .code_description(diagnostic::CodeDescription::new(&value.rule.source))
+                .source(super::CFN_LINT.into())
+                .message(value.message)
+                .tags(Vec::new())
+                .related_information(Vec::new())
+                .build()
         }
     }
 }

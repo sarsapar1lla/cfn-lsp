@@ -1,3 +1,4 @@
+use std::fmt::Display;
 use std::io::BufRead;
 use std::io::BufReader;
 use std::io::Read;
@@ -16,6 +17,21 @@ pub enum ReadError {
         error_code: ErrorCode,
     },
     Internal(String),
+}
+
+impl Display for ReadError {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            ReadError::MalformedHeaders => write!(f, "Request contained malformed headers"),
+            ReadError::InvalidContentType(content_type) => {
+                write!(f, "Content type '{content_type}' is not supported")
+            }
+            ReadError::InvalidRequest { id, error_code } => {
+                write!(f, "Request id '{id}' is invalid: {error_code}")
+            }
+            ReadError::Internal(message) => write!(f, "Internal error: {message}"),
+        }
+    }
 }
 
 impl From<ReadError> for Response {
@@ -73,18 +89,25 @@ where
         .read_exact(&mut buffer)
         .map_err(|_| ReadError::Internal("Failed to read from input".into()))?;
 
-    let content = String::from_utf8(buffer).map_err(|_| ReadError::InvalidRequest {
-        id: RequestId::Null,
-        error_code: ErrorCode::ParseError,
+    let content = String::from_utf8(buffer).map_err(|_| {
+        tracing::error!("Failed to decode message content to utf-8");
+        ReadError::InvalidRequest {
+            id: RequestId::Null,
+            error_code: ErrorCode::ParseError,
+        }
     })?;
-    if let Ok(message) = serde_json::from_str(&content) {
-        Ok(message)
-    } else {
-        let request_id = request_id(&content)?;
-        Err(ReadError::InvalidRequest {
-            id: request_id,
-            error_code: ErrorCode::InvalidRequest,
-        })
+
+    tracing::debug!("cfn-lsp <- {content}");
+    match serde_json::from_str(&content) {
+        Ok(message) => Ok(message),
+        Err(error) => {
+            tracing::error!("Failed to deserialise message content: {error}");
+            let request_id = request_id(&content)?;
+            Err(ReadError::InvalidRequest {
+                id: request_id,
+                error_code: ErrorCode::InvalidRequest,
+            })
+        }
     }
 }
 

@@ -1,67 +1,10 @@
 use bon::Builder;
 use serde::{Deserialize, Serialize};
 
-#[derive(Debug, Deserialize)]
-#[cfg_attr(test, derive(PartialEq, Eq))]
-pub struct Params {
-    #[serde(rename = "textDocument")]
-    text_document: TextDocumentIdentifier,
-    identifier: Option<String>,
-    #[serde(rename = "previousResultId")]
-    previous_result_id: Option<String>,
-}
+pub mod publish;
+pub mod pull;
 
-impl Params {
-    pub fn uri(&self) -> &str {
-        &self.text_document.uri
-    }
-}
-
-#[derive(Debug, Deserialize)]
-#[cfg_attr(test, derive(PartialEq, Eq))]
-struct TextDocumentIdentifier {
-    uri: String,
-}
-
-#[derive(Debug, Serialize)]
-#[serde(untagged)]
-pub enum Result {
-    Full {
-        kind: ReportKind,
-        result_id: String,
-        items: Vec<Diagnostic>,
-    },
-    Unchanged {
-        kind: ReportKind,
-        result_id: String,
-    },
-}
-
-impl Result {
-    pub fn full(result_id: &str, items: Vec<Diagnostic>) -> Self {
-        Self::Full {
-            kind: ReportKind::Full,
-            result_id: result_id.into(),
-            items,
-        }
-    }
-
-    pub fn unchanged(result_id: &str) -> Self {
-        Self::Unchanged {
-            kind: ReportKind::Unchanged,
-            result_id: result_id.into(),
-        }
-    }
-}
-
-#[derive(Debug, Serialize)]
-#[serde(rename_all = "lowercase")]
-pub enum ReportKind {
-    Full,
-    Unchanged,
-}
-
-#[derive(Debug, Serialize, Builder)]
+#[derive(Debug, Deserialize, Serialize, Builder)]
 #[cfg_attr(test, derive(PartialEq, Eq))]
 #[serde(rename_all = "camelCase")]
 pub struct Diagnostic {
@@ -76,20 +19,20 @@ pub struct Diagnostic {
     data: Option<serde_json::Value>,
 }
 
-#[derive(Debug, Serialize, Clone)]
+#[derive(Debug, Deserialize, Serialize, Clone)]
 #[cfg_attr(test, derive(PartialEq, Eq))]
 pub struct Position {
-    line: u32,
-    character: u32,
+    line: usize,
+    character: usize,
 }
 
 impl Position {
-    pub fn new(line: u32, character: u32) -> Self {
+    pub fn new(line: usize, character: usize) -> Self {
         Self { line, character }
     }
 }
 
-#[derive(Debug, Serialize)]
+#[derive(Debug, Deserialize, Serialize)]
 #[cfg_attr(test, derive(PartialEq, Eq))]
 pub struct Range {
     start: Position,
@@ -102,7 +45,7 @@ impl Range {
     }
 }
 
-#[derive(Debug)]
+#[derive(Debug, Deserialize)]
 #[cfg_attr(test, derive(PartialEq, Eq))]
 pub enum Severity {
     Error,
@@ -131,7 +74,7 @@ impl Serialize for Severity {
     }
 }
 
-#[derive(Debug, Serialize)]
+#[derive(Debug, Deserialize, Serialize)]
 #[cfg_attr(test, derive(PartialEq, Eq))]
 pub struct CodeDescription {
     href: String,
@@ -143,7 +86,7 @@ impl CodeDescription {
     }
 }
 
-#[derive(Debug)]
+#[derive(Debug, Deserialize)]
 #[cfg_attr(test, derive(PartialEq, Eq))]
 pub enum Tag {
     Unnecessary,
@@ -168,7 +111,7 @@ impl Serialize for Tag {
     }
 }
 
-#[derive(Debug, Serialize)]
+#[derive(Debug, Deserialize, Serialize)]
 #[cfg_attr(test, derive(PartialEq, Eq))]
 pub struct RelatedInformation {
     location: Location,
@@ -184,7 +127,7 @@ impl RelatedInformation {
     }
 }
 
-#[derive(Debug, Serialize)]
+#[derive(Debug, Deserialize, Serialize)]
 #[cfg_attr(test, derive(PartialEq, Eq))]
 pub struct Location {
     uri: String,

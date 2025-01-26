@@ -2,21 +2,13 @@ use std::fmt::Display;
 
 use serde::{Deserialize, Serialize};
 
-#[derive(Debug, Deserialize, Clone)]
+#[derive(Debug, Deserialize, Serialize, Clone)]
 #[cfg_attr(test, derive(PartialEq, Eq))]
 pub struct Params {
     #[serde(rename = "processId")]
     process_id: Option<i32>,
     #[serde(rename = "clientInfo")]
     client_info: Option<ClientInfo>,
-    locale: Option<String>,
-    #[serde(rename = "initializationOptions")]
-    initialisation_options: Option<serde_json::Value>,
-    capabilities: ClientCapabilities,
-    #[serde(default)]
-    trace: TraceValue,
-    #[serde(rename = "workspaceFolders")]
-    workspace_folders: Option<Vec<WorkspaceFolder>>,
 }
 
 impl Params {
@@ -29,7 +21,7 @@ impl Params {
     }
 }
 
-#[derive(Debug, Deserialize, Clone)]
+#[derive(Debug, Deserialize, Serialize, Clone)]
 #[cfg_attr(test, derive(PartialEq, Eq))]
 pub struct ClientInfo {
     name: String,
@@ -106,14 +98,16 @@ struct WorkspaceFolder {
     name: String,
 }
 
-#[derive(Debug, Serialize, Default)]
+#[derive(Debug, Deserialize, Serialize, Default)]
+#[cfg_attr(test, derive(PartialEq, Eq))]
 pub struct Result {
     capabilities: ServerCapabilities,
     #[serde(rename = "serverInfo")]
     server_info: ServerInfo,
 }
 
-#[derive(Debug, Serialize, Default)]
+#[derive(Debug, Deserialize, Serialize, Default)]
+#[cfg_attr(test, derive(PartialEq, Eq))]
 #[serde(rename_all = "camelCase")]
 struct ServerCapabilities {
     position_encoding: PositionEncoding,
@@ -124,20 +118,24 @@ struct ServerCapabilities {
 #[derive(Debug, Deserialize, Serialize, Clone)]
 #[cfg_attr(test, derive(PartialEq, Eq))]
 enum PositionEncoding {
+    #[serde(rename = "utf-8")]
+    Utf8,
     #[serde(rename = "utf-16")]
     Utf16,
 }
 
 impl Default for PositionEncoding {
     fn default() -> Self {
-        Self::Utf16
+        Self::Utf8
     }
 }
 
-#[derive(Debug, Serialize)]
+#[derive(Debug, Deserialize, Serialize)]
+#[cfg_attr(test, derive(PartialEq, Eq))]
 struct TextDocumentSync {
     #[serde(rename = "openClose")]
     open_close: bool,
+    save: bool,
     change: TextDocumentSyncKind,
 }
 
@@ -145,12 +143,14 @@ impl Default for TextDocumentSync {
     fn default() -> Self {
         Self {
             open_close: true,
+            save: true,
             change: TextDocumentSyncKind::default(),
         }
     }
 }
 
-#[derive(Debug)]
+#[derive(Debug, Deserialize)]
+#[cfg_attr(test, derive(PartialEq, Eq))]
 enum TextDocumentSyncKind {
     None,
     Full,
@@ -169,7 +169,7 @@ impl TextDocumentSyncKind {
 
 impl Default for TextDocumentSyncKind {
     fn default() -> Self {
-        Self::Full
+        Self::None
     }
 }
 
@@ -182,7 +182,8 @@ impl Serialize for TextDocumentSyncKind {
     }
 }
 
-#[derive(Debug, Serialize)]
+#[derive(Debug, Deserialize, Serialize)]
+#[cfg_attr(test, derive(PartialEq, Eq))]
 struct DiagnosticOptions {
     identifier: String,
     #[serde(rename = "interFileDependencies")]
@@ -201,7 +202,8 @@ impl Default for DiagnosticOptions {
     }
 }
 
-#[derive(Debug, Serialize)]
+#[derive(Debug, Deserialize, Serialize)]
+#[cfg_attr(test, derive(PartialEq, Eq))]
 struct ServerInfo {
     name: String,
     version: String,
@@ -219,12 +221,4 @@ impl Default for ServerInfo {
 #[derive(Debug, Serialize, Default)]
 pub struct Error {
     retry: bool,
-}
-
-impl Error {
-    pub fn to_value(&self) -> serde_json::Value {
-        let mut object = serde_json::Map::new();
-        object.insert("retry".into(), serde_json::Value::Bool(self.retry));
-        serde_json::Value::Object(object)
-    }
 }

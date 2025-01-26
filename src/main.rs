@@ -2,7 +2,7 @@
 
 use clap::Parser;
 use handler::MessageHandler;
-use model::Response;
+use model::{Message, Response};
 
 mod channel;
 mod cli;
@@ -27,7 +27,10 @@ fn main() {
         let message = reader::read(&mut input);
         let response = match message {
             Ok(message) => handler.handle(message),
-            Err(error) => Some(Response::from(error)),
+            Err(error) => {
+                tracing::error!("{error}");
+                Some(Message::Response(Response::from(error)))
+            }
         };
 
         if let Some(response) = response {

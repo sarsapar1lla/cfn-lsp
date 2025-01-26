@@ -34,14 +34,14 @@ impl MessageHandler {
         }
     }
 
-    pub fn handle(&mut self, message: Message) -> Option<Response> {
+    pub fn handle(&mut self, message: Message) -> Option<Message> {
         match message {
-            Message::Request(request) => Some(self.handle_request(&request)),
-            Message::BatchRequest(requests) => Some(self.handle_request_batch(requests)),
-            Message::Notification(notification) => {
-                self.handle_notification(&notification);
-                None
+            Message::Request(request) => Some(Message::Response(self.handle_request(&request))),
+            Message::BatchRequest(requests) => {
+                Some(Message::Response(self.handle_request_batch(requests)))
             }
+            Message::Notification(notification) => self.handle_notification(&notification),
+            Message::Response(_) => None,
         }
     }
 
@@ -63,22 +63,36 @@ impl MessageHandler {
             State::Shutdown => request_post_shutdown(request.id()),
             State::Initialised(_) => match request.method() {
                 RequestMethod::Shutdown => self.shutdown(request.id()),
-                RequestMethod::TextDocumentDiagnostic(params) => {
-                    self.text_document_diagnostic(request.id(), params)
+                RequestMethod::PullDiagnostics(params) => {
+                    self.pull_diagnostics(request.id(), params)
                 }
                 RequestMethod::Initialise(_) => already_initialised(request.id()),
             },
         }
     }
 
-    fn handle_notification(&self, notification: &Notification) {
+    fn handle_notification(&self, notification: &Notification) -> Option<Message> {
         match self.state {
             State::Uninitialised | State::Shutdown => {
                 if let NotificationMethod::Exit = notification.method() {
                     MessageHandler::exit();
+                    None
+                } else {
+                    None
                 }
             }
-            State::Initialised(_) => {}
+            State::Initialised(_) => match notification.method() {
+                NotificationMethod::DidOpen(params) => self
+                    .publish_diagnostics(
+                        params.text_document().uri(),
+                        Some(params.text_document().version()),
+                    )
+                    .map(|notification| Message::Notification(notification)),
+                NotificationMethod::DidSave(params) => self
+                    .publish_diagnostics(params.text_document().uri(), None)
+                    .map(|notification| Message::Notification(notification)),
+                _ => None,
+            },
         }
     }
 
@@ -101,17 +115,16 @@ impl MessageHandler {
         Response::Success(success)
     }
 
-    fn text_document_diagnostic(&self, id: &RequestId, params: &diagnostic::Params) -> Response {
+    fn pull_diagnostics(&self, id: &RequestId, params: &diagnostic::pull::Params) -> Response {
         tracing::debug!(
             id = tracing::field::display(id),
             "Generating diagnostics for file '{}'",
             params.uri()
         );
-        match self.linter.lint(params) {
+        match self.linter.lint(params.uri()) {
             Ok(diagnostics) => {
-                let result = diagnostic::Result::full("result", diagnostics);
-                let success =
-                    SuccessResponse::new(id, ResponseResult::TextDocumentDiagnostic(result));
+                let result = diagnostic::pull::Result::full("result", diagnostics);
+                let success = SuccessResponse::new(id, ResponseResult::PullDiagnostics(result));
                 Response::Success(success)
             }
             Err(error) => {
@@ -122,6 +135,22 @@ impl MessageHandler {
                 let error = Error::new(ErrorCode::Internal, "Failed to generate diagnostics", None);
                 Response::Error(ErrorResponse::new(id, error))
             }
+        }
+    }
+
+    fn publish_diagnostics(&self, uri: &str, version: Option<usize>) -> Option<Notification> {
+        tracing::debug!(
+            "Generating diagnostics for file '{}', version '{:?}'",
+            uri,
+            version,
+        );
+        if let Ok(diagnostics) = self.linter.lint(uri) {
+            let publish_diagnostics = diagnostic::publish::Params::new(uri, version, diagnostics);
+            Some(Notification::new(NotificationMethod::PublishDiagnostics(
+                publish_diagnostics,
+            )))
+        } else {
+            None
         }
     }
 
