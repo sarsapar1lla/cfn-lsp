@@ -1,0 +1,3 @@
+{"jsonrpc":"2.0","method":"initialize","params":{"clientInfo": {"name":"test","version":"0.1.0"}, "capabilities":{"something":"here"}},"id":"123"}
+{"jsonrpc":"2.0","method":"textDocument/diagnostic","params":{"textDocument":{"uri":"./tests/resources/cf.yaml"}},"id":"456"}
+{"jsonrpc":"2.0","method":"shutdown","id":"789"}

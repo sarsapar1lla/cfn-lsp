@@ -1,0 +1,16 @@
+Parameters:
+  Something:
+    Type: String
+    Description: It's a thing
+
+Resources:
+  Bucket:
+    Type: AWS::S3::Bucket
+    Properties:
+      BucketName: my-bucket
+      Something: value
+      Tags:
+        - Key: !Ref Something
+          Value: else
+        - Key: another
+          Value: thing
