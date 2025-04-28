@@ -1,13 +1,12 @@
 use crate::{
     method::diagnostic::{CfnLinter, Lint},
     model::{
-        method::{
-            diagnostic,
-            initialise::{self, ClientInfo},
-            NotificationMethod, RequestMethod,
-        },
         Error, ErrorCode, ErrorResponse, Message, Notification, Request, RequestId, Response,
         ResponseResult, SuccessResponse,
+        method::{
+            NotificationMethod, RequestMethod, diagnostic,
+            initialise::{self, ClientInfo},
+        },
     },
 };
 
@@ -87,10 +86,10 @@ impl MessageHandler {
                         params.text_document().uri(),
                         Some(params.text_document().version()),
                     )
-                    .map(|notification| Message::Notification(notification)),
+                    .map(Message::Notification),
                 NotificationMethod::DidSave(params) => self
                     .publish_diagnostics(params.text_document().uri(), None)
-                    .map(|notification| Message::Notification(notification)),
+                    .map(Message::Notification),
                 _ => None,
             },
         }
